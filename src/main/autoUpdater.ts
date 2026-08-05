@@ -57,7 +57,29 @@ class UpdateManager extends EventEmitter {
   }
 
   installNow(): void {
-    autoUpdater.quitAndInstall()
+    logger.info('Instalação da atualização solicitada pelo usuário.')
+    try {
+      // isSilent=false: mostra a UI do instalador (assim dá pra ver algo
+      // acontecendo). isForceRunAfter=true: reabre o app depois de instalar —
+      // explícito em vez de depender do valor padrão do electron-updater.
+      autoUpdater.quitAndInstall(false, true)
+    } catch (err) {
+      logger.error({ err }, 'quitAndInstall lançou uma exceção')
+      this.setStatus({ status: 'error', errorMessage: (err as Error).message })
+      return
+    }
+
+    // Se o app realmente fechar pra instalar, o processo termina e este timer
+    // nunca dispara. Se disparar, quitAndInstall() falhou em silêncio (ex: o
+    // instalador baixado sumiu do disco) — sem isso o usuário não via nada.
+    setTimeout(() => {
+      logger.warn('quitAndInstall não fechou o app a tempo; instalador provavelmente falhou.')
+      this.setStatus({
+        status: 'error',
+        errorMessage:
+          'Não foi possível iniciar o instalador. Tente "Verificar atualizações" de novo.'
+      })
+    }, 5000)
   }
 }
 

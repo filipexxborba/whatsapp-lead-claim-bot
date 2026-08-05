@@ -1,4 +1,12 @@
-import { app, dialog, ipcMain, nativeTheme, shell, BrowserWindow } from 'electron'
+import {
+  app,
+  autoUpdater as nativeAutoUpdater,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  shell,
+  BrowserWindow
+} from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -109,6 +117,16 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', () => {
+  isQuitting = true
+})
+
+// electron-updater emite isso (no autoUpdater nativo do Electron, não no dele
+// próprio) logo antes de chamar app.quit() dentro de quitAndInstall(). Marcamos
+// isQuitting aqui também, de propósito redundante com o listener acima, pra não
+// depender de nenhuma suposição sobre ordem de eventos — sem isso, se por
+// algum motivo o "close" da janela rodar antes do "before-quit", a janela só
+// esconde (comportamento normal de fechar) e a atualização nunca reinicia o app.
+nativeAutoUpdater.on('before-quit-for-update', () => {
   isQuitting = true
 })
 
