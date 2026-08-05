@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { TemplateBuilder } from '@/components/TemplateBuilder'
 import type { MessageTemplate } from '../../../shared/types'
@@ -17,11 +16,6 @@ export function Templates(): React.JSX.Element {
     void load()
   }, [])
 
-  async function handleSetActive(id: string): Promise<void> {
-    await window.api.templates.setActive(id)
-    await load()
-  }
-
   async function handleDelete(id: string): Promise<void> {
     await window.api.templates.delete(id)
     await load()
@@ -35,7 +29,8 @@ export function Templates(): React.JSX.Element {
             <div>
               <CardTitle>Templates de mensagem</CardTitle>
               <CardDescription>
-                Só o template marcado como &quot;ativo&quot; é enviado no PV. Use{' '}
+                Vincule cada template a um gatilho na aba Gatilhos — cada gatilho envia o template
+                que estiver associado a ele. Use{' '}
                 <code className="rounded bg-muted px-1">{'{{gatilho}}'}</code> para incluir o texto
                 que a pessoa mandou no grupo.
               </CardDescription>
@@ -47,24 +42,10 @@ export function Templates(): React.JSX.Element {
           {templates.map((template) => (
             <div key={template.id} className="flex flex-col gap-2 rounded-lg border p-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{template.name}</span>
-                  {template.active && <Badge variant="success">Ativo</Badge>}
-                </div>
-                <div className="flex gap-2">
-                  {!template.active && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleSetActive(template.id)}
-                    >
-                      Ativar
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => handleDelete(template.id)}>
-                    Remover
-                  </Button>
-                </div>
+                <span className="font-medium">{template.name}</span>
+                <Button size="sm" variant="ghost" onClick={() => handleDelete(template.id)}>
+                  Remover
+                </Button>
               </div>
               <p className="whitespace-pre-wrap text-sm text-muted-foreground">{template.body}</p>
             </div>

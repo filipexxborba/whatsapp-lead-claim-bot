@@ -1,7 +1,13 @@
 import { app, ipcMain, BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
-import type { SupabaseConfig, Trigger, MessageTemplate } from '../shared/types'
-import { getSupabaseConfig, setSupabaseConfig, hasSupabaseConfig } from './configStore'
+import type { SupabaseConfig, Trigger, MessageTemplate, AppPreferences } from '../shared/types'
+import {
+  getSupabaseConfig,
+  setSupabaseConfig,
+  hasSupabaseConfig,
+  getPreferences,
+  setPreferences
+} from './configStore'
 import { resetSupabaseClient } from './supabaseClient'
 import * as db from './supabaseClient'
 import { bot } from './bot'
@@ -44,11 +50,16 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     db.upsertTemplate(template)
   )
   ipcMain.handle(IPC_CHANNELS.deleteTemplate, (_event, id: string) => db.deleteTemplate(id))
-  ipcMain.handle(IPC_CHANNELS.setActiveTemplate, (_event, id: string) => db.setActiveTemplate(id))
 
   ipcMain.handle(IPC_CHANNELS.listClaimedContacts, () => db.listClaimedContacts())
 
   ipcMain.handle(IPC_CHANNELS.getDashboardStats, () => db.getDashboardStats())
+  ipcMain.handle(IPC_CHANNELS.listAuditLog, () => db.listAuditLog())
+
+  ipcMain.handle(IPC_CHANNELS.getPreferences, () => getPreferences())
+  ipcMain.handle(IPC_CHANNELS.setPreferences, (_event, preferences: Partial<AppPreferences>) =>
+    setPreferences(preferences)
+  )
 
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion())
   ipcMain.handle(IPC_CHANNELS.updaterGetStatus, () => updateManager.getStatus())

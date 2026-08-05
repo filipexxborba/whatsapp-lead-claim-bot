@@ -13,7 +13,6 @@ import {
   syncDiscoveredGroups,
   listActiveGroupJids,
   listActiveTriggers,
-  getActiveTemplate,
   claimContact,
   markMessageSent
 } from './supabaseClient'
@@ -159,6 +158,12 @@ class WhatsAppBot extends EventEmitter {
     const senderJid = message.key.participant
     if (!senderJid) return
 
+    // O WhatsApp identifica remetentes em grupos por um LID (Linked ID) em vez do
+    // número de telefone real, por privacidade. Quando disponível, o Baileys expõe
+    // o número real em participantAlt — usamos ele só para exibição/registro do
+    // lead; o envio da DM continua endereçado ao JID que o WhatsApp resolveu.
+    const senderPhoneJid = message.key.participantAlt ?? senderJid
+
     const text = extractText(message)
     if (!text) return
 
@@ -177,7 +182,7 @@ class WhatsAppBot extends EventEmitter {
 
       const isNewClaim = await claimContact({
         messageId,
-        phoneJid: senderJid,
+        phoneJid: senderPhoneJid,
         groupJid,
         groupName: groupMetadata.subject,
         triggerText: matched.text
@@ -188,9 +193,9 @@ class WhatsAppBot extends EventEmitter {
         react: { text: '👍', key: message.key }
       })
 
-      const template = await getActiveTemplate()
+      const template = matched.template
       if (!template) {
-        logger.warn('Nenhum template de mensagem ativo configurado; DM não enviada.')
+        logger.warn(`Gatilho "${matched.text}" não tem template configurado; DM não enviada.`)
         return
       }
 

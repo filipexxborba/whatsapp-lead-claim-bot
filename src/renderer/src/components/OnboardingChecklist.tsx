@@ -12,24 +12,34 @@ export function OnboardingChecklist({
   stats: DashboardStats
   onNavigate: (page: ConfigPage) => void
 }>): React.JSX.Element {
-  const items: { id: ConfigPage; title: string; description: string; done: boolean }[] = [
+  const items: {
+    key: string
+    page: ConfigPage
+    title: string
+    description: string
+    done: boolean
+  }[] = [
     {
-      id: 'groups',
+      key: 'groups',
+      page: 'groups',
       title: 'Selecione os grupos monitorados',
       description: 'O bot só reage em grupos marcados como ativos na aba Grupos.',
       done: stats.activeGroups > 0
     },
     {
-      id: 'triggers',
+      key: 'triggers',
+      page: 'triggers',
       title: 'Ative um gatilho',
       description: 'Define qual palavra ou frase o bot reconhece nas mensagens do grupo.',
       done: stats.activeTriggers > 0
     },
     {
-      id: 'templates',
-      title: 'Ative um template de mensagem',
-      description: 'É a mensagem enviada no PV para quem for abordado.',
-      done: stats.hasActiveTemplate
+      key: 'trigger-templates',
+      page: 'triggers',
+      title: 'Defina o template de cada gatilho ativo',
+      description:
+        'Cada gatilho envia sua própria mensagem no PV — associe um template a todos os que estiverem ativos, na aba Gatilhos.',
+      done: stats.activeTriggers > 0 && stats.activeTriggersMissingTemplate === 0
     }
   ]
 
@@ -58,7 +68,7 @@ export function OnboardingChecklist({
       <CardContent className="flex flex-col gap-3">
         {items.map((item) => (
           <div
-            key={item.id}
+            key={item.key}
             className="flex items-center justify-between gap-4 rounded-lg border p-3"
           >
             <div className="flex items-start gap-3">
@@ -77,7 +87,7 @@ export function OnboardingChecklist({
                 size="sm"
                 variant="outline"
                 className="shrink-0"
-                onClick={() => onNavigate(item.id)}
+                onClick={() => onNavigate(item.page)}
               >
                 Configurar
               </Button>

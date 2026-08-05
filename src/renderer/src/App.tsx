@@ -10,10 +10,11 @@ import { Triggers } from '@/pages/Triggers'
 import { Templates } from '@/pages/Templates'
 import { Leads } from '@/pages/Leads'
 import { Settings } from '@/pages/Settings'
+import { Audit } from '@/pages/Audit'
 
-type Page = 'dashboard' | 'groups' | 'triggers' | 'templates' | 'leads' | 'settings'
+type Page = 'dashboard' | 'groups' | 'triggers' | 'templates' | 'leads' | 'settings' | 'audit'
 
-const NAV_ITEMS: { id: Page; label: string }[] = [
+const BASE_NAV_ITEMS: { id: Page; label: string }[] = [
   { id: 'dashboard', label: 'Painel' },
   { id: 'groups', label: 'Grupos' },
   { id: 'triggers', label: 'Gatilhos' },
@@ -25,11 +26,25 @@ const NAV_ITEMS: { id: Page; label: string }[] = [
 function App(): React.JSX.Element {
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [page, setPage] = useState<Page>('dashboard')
+  const [auditLogEnabled, setAuditLogEnabled] = useState(false)
   const status = useBotStatus()
 
   useEffect(() => {
     window.api.config.has().then(setConfigured)
+    window.api.preferences
+      .get()
+      .then((preferences) => setAuditLogEnabled(preferences.auditLogEnabled))
   }, [])
+
+  async function handleAuditLogEnabledChange(enabled: boolean): Promise<void> {
+    setAuditLogEnabled(enabled)
+    if (!enabled && page === 'audit') setPage('dashboard')
+    await window.api.preferences.set({ auditLogEnabled: enabled })
+  }
+
+  const navItems = auditLogEnabled
+    ? [...BASE_NAV_ITEMS, { id: 'audit' as const, label: 'Auditoria' }]
+    : BASE_NAV_ITEMS
 
   if (configured === null) {
     return (
@@ -53,7 +68,7 @@ function App(): React.JSX.Element {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-2">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -77,7 +92,14 @@ function App(): React.JSX.Element {
         {page === 'triggers' && <Triggers />}
         {page === 'templates' && <Templates />}
         {page === 'leads' && <Leads />}
-        {page === 'settings' && <Settings status={status} />}
+        {page === 'settings' && (
+          <Settings
+            status={status}
+            auditLogEnabled={auditLogEnabled}
+            onAuditLogEnabledChange={handleAuditLogEnabledChange}
+          />
+        )}
+        {page === 'audit' && auditLogEnabled && <Audit />}
       </main>
     </div>
   )

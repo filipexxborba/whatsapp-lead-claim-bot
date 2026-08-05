@@ -10,7 +10,9 @@ import type {
   BotStatusPayload,
   ConnectionTestResult,
   DashboardStats,
-  UpdateStatusPayload
+  UpdateStatusPayload,
+  AppPreferences,
+  AuditLogEntry
 } from '../shared/types'
 
 const api = {
@@ -21,6 +23,11 @@ const api = {
     has: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.hasSupabaseConfig),
     test: (config: SupabaseConfig): Promise<ConnectionTestResult> =>
       ipcRenderer.invoke(IPC_CHANNELS.testSupabaseConfig, config)
+  },
+  preferences: {
+    get: (): Promise<AppPreferences> => ipcRenderer.invoke(IPC_CHANNELS.getPreferences),
+    set: (preferences: Partial<AppPreferences>): Promise<AppPreferences> =>
+      ipcRenderer.invoke(IPC_CHANNELS.setPreferences, preferences)
   },
   bot: {
     start: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.botStart),
@@ -49,14 +56,16 @@ const api = {
     list: (): Promise<MessageTemplate[]> => ipcRenderer.invoke(IPC_CHANNELS.listTemplates),
     upsert: (template: Partial<MessageTemplate>): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.upsertTemplate, template),
-    delete: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.deleteTemplate, id),
-    setActive: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.setActiveTemplate, id)
+    delete: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.deleteTemplate, id)
   },
   contacts: {
     list: (): Promise<ClaimedContact[]> => ipcRenderer.invoke(IPC_CHANNELS.listClaimedContacts)
   },
   dashboard: {
     getStats: (): Promise<DashboardStats> => ipcRenderer.invoke(IPC_CHANNELS.getDashboardStats)
+  },
+  audit: {
+    list: (): Promise<AuditLogEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.listAuditLog)
   },
   updater: {
     getAppVersion: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),

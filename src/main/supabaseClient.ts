@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import pino from 'pino'
 import { getSupabaseConfig } from './configStore'
 import type {
   WhatsAppGroup,
@@ -7,8 +8,13 @@ import type {
   ClaimedContact,
   SupabaseConfig,
   ConnectionTestResult,
-  DashboardStats
+  DashboardStats,
+  AuditEntityType,
+  AuditAction,
+  AuditLogEntry
 } from '../shared/types'
+
+const logger = pino({ level: 'warn' })
 
 let client: SupabaseClient | null = null
 
@@ -26,6 +32,25 @@ export function getSupabase(): SupabaseClient {
 
 export function resetSupabaseClient(): void {
   client = null
+}
+
+/** Best-effort: uma falha ao gravar o log de auditoria nunca deve derrubar a ação que já aconteceu. */
+async function logAudit(
+  entityType: AuditEntityType,
+  entityId: string,
+  action: AuditAction,
+  before: unknown,
+  after: unknown
+): Promise<void> {
+  try {
+    const supabase = getSupabase()
+    const { error } = await supabase
+      .from('audit_log')
+      .insert({ entity_type: entityType, entity_id: entityId, action, before, after })
+    if (error) throw error
+  } catch (err) {
+    logger.error({ err, entityType, entityId, action }, 'Falha ao registrar log de auditoria')
+  }
 }
 
 export async function testSupabaseConnection(
@@ -88,7 +113,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     totalGroupsRes,
     recentLeadsRes,
     activeTriggersRes,
-    activeTemplatesRes
+    activeTriggersMissingTemplateRes
   ] = await Promise.all([
     supabase.from('claimed_contacts').select('*', { count: 'exact', head: true }),
     supabase
@@ -107,9 +132,10 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       .gte('claimed_at', rangeStart.toISOString()),
     supabase.from('triggers').select('*', { count: 'exact', head: true }).eq('active', true),
     supabase
-      .from('message_templates')
+      .from('triggers')
       .select('*', { count: 'exact', head: true })
       .eq('active', true)
+      .is('template_id', null)
   ])
 
   for (const res of [
@@ -120,7 +146,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     totalGroupsRes,
     recentLeadsRes,
     activeTriggersRes,
-    activeTemplatesRes
+    activeTriggersMissingTemplateRes
   ]) {
     if (res.error) throw res.error
   }
@@ -136,7 +162,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     activeGroups: activeGroupsRes.count ?? 0,
     totalGroups: totalGroupsRes.count ?? 0,
     activeTriggers: activeTriggersRes.count ?? 0,
-    hasActiveTemplate: (activeTemplatesRes.count ?? 0) > 0,
+    activeTriggersMissingTemplate: activeTriggersMissingTemplateRes.count ?? 0,
     leadsByDay: buildLeadsByDay(rangeStart, recentLeadsRes.data ?? [])
   }
 }
@@ -162,8 +188,14 @@ export async function listGroups(): Promise<WhatsAppGroup[]> {
 
 export async function toggleGroup(jid: string, active: boolean): Promise<void> {
   const supabase = getSupabase()
+  const { data: before } = await supabase
+    .from('whatsapp_groups')
+    .select('*')
+    .eq('jid', jid)
+    .maybeSingle()
   const { error } = await supabase.from('whatsapp_groups').update({ active }).eq('jid', jid)
   if (error) throw error
+  await logAudit('group', jid, 'updated', before, { ...before, active })
 }
 
 export async function listActiveGroupJids(): Promise<Set<string>> {
@@ -179,29 +211,55 @@ export async function listTriggers(): Promise<Trigger[]> {
   const supabase = getSupabase()
   const { data, error } = await supabase
     .from('triggers')
-    .select('*')
+    .select('*, template:message_templates(*)')
     .order('created_at', { ascending: false })
   if (error) throw error
-  return data as Trigger[]
+  return data as unknown as Trigger[]
 }
 
 export async function upsertTrigger(trigger: Partial<Trigger>): Promise<void> {
   const supabase = getSupabase()
-  const { error } = await supabase.from('triggers').upsert(trigger)
-  if (error) throw error
+  // "template" é um campo virtual (join do Supabase), não uma coluna real da tabela.
+  const record: Partial<Trigger> = { ...trigger }
+  delete record.template
+
+  if (record.id) {
+    const { data: before } = await supabase
+      .from('triggers')
+      .select('*')
+      .eq('id', record.id)
+      .maybeSingle()
+    const { data: after, error } = await supabase
+      .from('triggers')
+      .update(record)
+      .eq('id', record.id)
+      .select()
+      .maybeSingle()
+    if (error) throw error
+    await logAudit('trigger', record.id, 'updated', before, after)
+  } else {
+    const { data: after, error } = await supabase.from('triggers').insert(record).select().single()
+    if (error) throw error
+    await logAudit('trigger', after.id, 'created', null, after)
+  }
 }
 
 export async function deleteTrigger(id: string): Promise<void> {
   const supabase = getSupabase()
+  const { data: before } = await supabase.from('triggers').select('*').eq('id', id).maybeSingle()
   const { error } = await supabase.from('triggers').delete().eq('id', id)
   if (error) throw error
+  await logAudit('trigger', id, 'deleted', before, null)
 }
 
 export async function listActiveTriggers(): Promise<Trigger[]> {
   const supabase = getSupabase()
-  const { data, error } = await supabase.from('triggers').select('*').eq('active', true)
+  const { data, error } = await supabase
+    .from('triggers')
+    .select('*, template:message_templates(*)')
+    .eq('active', true)
   if (error) throw error
-  return data as Trigger[]
+  return data as unknown as Trigger[]
 }
 
 // --- Templates ---
@@ -218,37 +276,42 @@ export async function listTemplates(): Promise<MessageTemplate[]> {
 
 export async function upsertTemplate(template: Partial<MessageTemplate>): Promise<void> {
   const supabase = getSupabase()
-  const { error } = await supabase.from('message_templates').upsert(template)
-  if (error) throw error
+
+  if (template.id) {
+    const { data: before } = await supabase
+      .from('message_templates')
+      .select('*')
+      .eq('id', template.id)
+      .maybeSingle()
+    const { data: after, error } = await supabase
+      .from('message_templates')
+      .update(template)
+      .eq('id', template.id)
+      .select()
+      .maybeSingle()
+    if (error) throw error
+    await logAudit('template', template.id, 'updated', before, after)
+  } else {
+    const { data: after, error } = await supabase
+      .from('message_templates')
+      .insert(template)
+      .select()
+      .single()
+    if (error) throw error
+    await logAudit('template', after.id, 'created', null, after)
+  }
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
   const supabase = getSupabase()
-  const { error } = await supabase.from('message_templates').delete().eq('id', id)
-  if (error) throw error
-}
-
-export async function setActiveTemplate(id: string): Promise<void> {
-  const supabase = getSupabase()
-  const { error: deactivateError } = await supabase
-    .from('message_templates')
-    .update({ active: false })
-    .neq('id', id)
-  if (deactivateError) throw deactivateError
-
-  const { error } = await supabase.from('message_templates').update({ active: true }).eq('id', id)
-  if (error) throw error
-}
-
-export async function getActiveTemplate(): Promise<MessageTemplate | null> {
-  const supabase = getSupabase()
-  const { data, error } = await supabase
+  const { data: before } = await supabase
     .from('message_templates')
     .select('*')
-    .eq('active', true)
+    .eq('id', id)
     .maybeSingle()
+  const { error } = await supabase.from('message_templates').delete().eq('id', id)
   if (error) throw error
-  return data as MessageTemplate | null
+  await logAudit('template', id, 'deleted', before, null)
 }
 
 // --- Claimed contacts ---
@@ -302,4 +365,17 @@ export async function listClaimedContacts(limit = 200): Promise<ClaimedContact[]
     .limit(limit)
   if (error) throw error
   return data as ClaimedContact[]
+}
+
+// --- Audit log ---
+
+export async function listAuditLog(limit = 200): Promise<AuditLogEntry[]> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('audit_log')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data as AuditLogEntry[]
 }

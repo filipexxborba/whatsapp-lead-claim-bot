@@ -32,7 +32,7 @@ export function UpdateCard(): React.JSX.Element {
   }, [])
 
   return (
-    <Card className="max-w-md">
+    <Card>
       <CardHeader>
         <CardTitle>Atualizações</CardTitle>
         <CardDescription>

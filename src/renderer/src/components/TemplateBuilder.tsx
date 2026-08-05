@@ -94,7 +94,7 @@ export function TemplateBuilder({
     if (!name.trim() || !body.trim()) return
     setSaving(true)
     try {
-      await window.api.templates.upsert({ name: name.trim(), body: body.trim(), active: false })
+      await window.api.templates.upsert({ name: name.trim(), body: body.trim() })
       reset()
       setOpen(false)
       await onCreated()

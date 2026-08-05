@@ -17,6 +17,8 @@ export interface Trigger {
   text: string
   match_type: 'exact' | 'contains'
   active: boolean
+  template_id: string | null
+  template?: MessageTemplate | null
   created_at?: string
 }
 
@@ -24,7 +26,6 @@ export interface MessageTemplate {
   id: string
   name: string
   body: string
-  active: boolean
   created_at?: string
 }
 
@@ -50,6 +51,23 @@ export interface ConnectionTestResult {
   message: string
 }
 
+export interface AppPreferences {
+  auditLogEnabled: boolean
+}
+
+export type AuditEntityType = 'group' | 'trigger' | 'template'
+export type AuditAction = 'created' | 'updated' | 'deleted'
+
+export interface AuditLogEntry {
+  id: string
+  entity_type: AuditEntityType
+  entity_id: string
+  action: AuditAction
+  before: unknown
+  after: unknown
+  created_at: string
+}
+
 export interface DashboardStats {
   totalLeads: number
   leadsToday: number
@@ -58,7 +76,7 @@ export interface DashboardStats {
   activeGroups: number
   totalGroups: number
   activeTriggers: number
-  hasActiveTemplate: boolean
+  activeTriggersMissingTemplate: number
   leadsByDay: { date: string; count: number }[]
 }
 
@@ -78,7 +96,11 @@ export const IPC_CHANNELS = {
   hasSupabaseConfig: 'config:has-supabase',
   testSupabaseConfig: 'config:test-supabase',
 
+  getPreferences: 'preferences:get',
+  setPreferences: 'preferences:set',
+
   getDashboardStats: 'dashboard:get-stats',
+  listAuditLog: 'audit:list',
 
   getAppVersion: 'updater:get-app-version',
   updaterGetStatus: 'updater:get-status',
@@ -103,7 +125,6 @@ export const IPC_CHANNELS = {
   listTemplates: 'templates:list',
   upsertTemplate: 'templates:upsert',
   deleteTemplate: 'templates:delete',
-  setActiveTemplate: 'templates:set-active',
 
   listClaimedContacts: 'contacts:list'
 } as const
