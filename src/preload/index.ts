@@ -78,6 +78,16 @@ const api = {
       ipcRenderer.on(IPC_CHANNELS.updaterStatusChanged, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.updaterStatusChanged, listener)
     }
+  },
+  theme: {
+    // Síncrono de propósito: precisa estar disponível antes do primeiro paint,
+    // pra aplicar a classe "dark" sem piscar o tema errado.
+    getResolvedSync: (): boolean => ipcRenderer.sendSync(IPC_CHANNELS.themeGetResolvedSync),
+    onResolvedChanged: (callback: (isDark: boolean) => void): (() => void) => {
+      const listener = (_event: unknown, isDark: boolean): void => callback(isDark)
+      ipcRenderer.on(IPC_CHANNELS.themeResolvedChanged, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.themeResolvedChanged, listener)
+    }
   }
 }
 

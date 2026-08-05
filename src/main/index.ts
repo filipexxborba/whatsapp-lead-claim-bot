@@ -1,12 +1,23 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, dialog, ipcMain, nativeTheme, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { createTray } from './tray'
-import { registerIpcHandlers } from './ipcHandlers'
 import { updateManager } from './autoUpdater'
+import { getPreferences } from './configStore'
+import { IPC_CHANNELS } from '../shared/types'
 
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+
+// Sem isso, um erro não tratado ao iniciar mata o processo em silêncio — quem
+// abriu o app com duplo clique só vê a janela "piscar" e fechar, sem nenhuma
+// pista do que aconteceu.
+function reportFatalError(context: string, err: unknown): void {
+  const message = err instanceof Error ? (err.stack ?? err.message) : String(err)
+  dialog.showErrorBox('Lead Claim Bot — erro ao iniciar', `${context}\n\n${message}`)
+}
+
+process.on('uncaughtException', (err) => reportFatalError('Erro inesperado', err))
+process.on('unhandledRejection', (err) => reportFatalError('Erro inesperado (promise)', err))
 
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -49,25 +60,52 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.h2oinnovation.whatsapp-lead-claim-bot')
+app.whenReady().then(async () => {
+  try {
+    electronApp.setAppUserModelId('com.h2oinnovation.whatsapp-lead-claim-bot')
 
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-  })
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+    })
 
-  createWindow()
-  createTray(() => mainWindow)
-  registerIpcHandlers(() => mainWindow)
+    // Registrado cedo (não dentro de ipcHandlers.ts, carregado sob demanda depois)
+    // porque o preload precisa ler o tema de forma síncrona antes do primeiro
+    // paint, pra não piscar o tema errado por uma fração de segundo.
+    nativeTheme.themeSource = getPreferences().theme
+    ipcMain.on(IPC_CHANNELS.themeGetResolvedSync, (event) => {
+      event.returnValue = nativeTheme.shouldUseDarkColors
+    })
+    nativeTheme.on('updated', () => {
+      mainWindow?.webContents.send(
+        IPC_CHANNELS.themeResolvedChanged,
+        nativeTheme.shouldUseDarkColors
+      )
+    })
 
-  updateManager.init()
-  updateManager.checkNow()
-  setInterval(() => updateManager.checkNow(), UPDATE_CHECK_INTERVAL_MS)
+    // Carregados só agora (não no topo do arquivo): tray e ipcHandlers puxam o
+    // Baileys, que é pesado pra carregar. Assim a janela já aparece antes, e se
+    // essa parte falhar, cai no catch abaixo em vez de matar o processo antes de
+    // qualquer coisa aparecer na tela.
+    createWindow()
 
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-    else mainWindow?.show()
-  })
+    const [{ createTray }, { registerIpcHandlers }] = await Promise.all([
+      import('./tray'),
+      import('./ipcHandlers')
+    ])
+    createTray(() => mainWindow)
+    registerIpcHandlers(() => mainWindow)
+
+    updateManager.init()
+    updateManager.checkNow()
+    setInterval(() => updateManager.checkNow(), UPDATE_CHECK_INTERVAL_MS)
+
+    app.on('activate', function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      else mainWindow?.show()
+    })
+  } catch (err) {
+    reportFatalError('Falha ao inicializar', err)
+  }
 })
 
 app.on('before-quit', () => {

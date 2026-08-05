@@ -351,9 +351,24 @@ export async function markMessageSent(messageId: string): Promise<void> {
   const supabase = getSupabase()
   const { error } = await supabase
     .from('claimed_contacts')
-    .update({ message_sent: true })
+    .update({ message_sent: true, message_sent_at: new Date().toISOString() })
     .eq('message_id', messageId)
   if (error) throw error
+}
+
+/** Quando a última DM foi enviada pra esse número, considerando todos os gatilhos já disparados por ele. */
+export async function getLastMessageSentAt(phoneJid: string): Promise<string | null> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('claimed_contacts')
+    .select('message_sent_at')
+    .eq('phone_jid', phoneJid)
+    .eq('message_sent', true)
+    .order('message_sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data?.message_sent_at ?? null
 }
 
 export async function listClaimedContacts(limit = 200): Promise<ClaimedContact[]> {

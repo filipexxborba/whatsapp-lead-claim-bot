@@ -43,10 +43,16 @@ create table if not exists claimed_contacts (
   group_name text,
   trigger_text text,
   message_sent boolean not null default false,
+  message_sent_at timestamptz,
   claimed_at timestamptz not null default now()
 );
 
+-- Migração: coluna usada pro intervalo mínimo entre mensagens pro mesmo número
+-- (evita mandar a mesma DM de novo se a pessoa disparar o gatilho outra vez).
+alter table claimed_contacts add column if not exists message_sent_at timestamptz;
+
 create index if not exists claimed_contacts_claimed_at_idx on claimed_contacts (claimed_at desc);
+create index if not exists claimed_contacts_phone_jid_idx on claimed_contacts (phone_jid);
 
 -- Auditoria: toda mudança de configuração (grupo, gatilho, template) fica registrada
 -- aqui pelo próprio app, com o estado antes/depois em jsonb. Não guarda leads

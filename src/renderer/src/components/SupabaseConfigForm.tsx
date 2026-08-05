@@ -81,7 +81,7 @@ export function SupabaseConfigForm({
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       {testResult && (
-        <p className={cn('text-sm', testResult.ok ? 'text-emerald-600' : 'text-destructive')}>
+        <p className={cn('text-sm', testResult.ok ? 'text-success' : 'text-destructive')}>
           {testResult.ok ? 'Conexão bem-sucedida.' : testResult.message}
         </p>
       )}

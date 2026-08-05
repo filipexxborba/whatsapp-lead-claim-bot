@@ -43,7 +43,16 @@ export function whatsAppAuthDir(): string {
   return dir
 }
 
-const DEFAULT_PREFERENCES: AppPreferences = { auditLogEnabled: false }
+const DEFAULT_PREFERENCES: AppPreferences = {
+  auditLogEnabled: false,
+  notifications: { leadClaimed: true, messageSent: true, botError: true },
+  theme: 'system',
+  // 24h: manda a DM no máximo uma vez por dia pro mesmo número, mesmo que a
+  // pessoa dispare o gatilho de novo — evita repetir o mesmo discurso de
+  // vendas pra quem já recebeu, o que é justamente o padrão que costuma
+  // gerar denúncia/bloqueio de spam no WhatsApp.
+  messageCooldownMinutes: 1440
+}
 
 const preferencesPath = (): string => join(app.getPath('userData'), 'preferences.json')
 
@@ -53,7 +62,11 @@ export function getPreferences(): AppPreferences {
 
   try {
     const stored = JSON.parse(readFileSync(filePath, 'utf-8')) as Partial<AppPreferences>
-    return { ...DEFAULT_PREFERENCES, ...stored }
+    return {
+      ...DEFAULT_PREFERENCES,
+      ...stored,
+      notifications: { ...DEFAULT_PREFERENCES.notifications, ...stored.notifications }
+    }
   } catch {
     return DEFAULT_PREFERENCES
   }

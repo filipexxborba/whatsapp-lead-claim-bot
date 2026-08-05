@@ -1,4 +1,4 @@
-import { app, ipcMain, BrowserWindow } from 'electron'
+import { app, ipcMain, nativeTheme, BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
 import type { SupabaseConfig, Trigger, MessageTemplate, AppPreferences } from '../shared/types'
 import {
@@ -10,8 +10,9 @@ import {
 } from './configStore'
 import { resetSupabaseClient } from './supabaseClient'
 import * as db from './supabaseClient'
-import { bot } from './bot'
+import { bot, type LeadClaimedInfo, type MessageSentInfo } from './bot'
 import { updateManager } from './autoUpdater'
+import { notify, formatPhone } from './notifications'
 
 export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle(IPC_CHANNELS.getSupabaseConfig, () => getSupabaseConfig())
@@ -32,6 +33,21 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
   bot.on('status', (status) => {
     getMainWindow()?.webContents.send(IPC_CHANNELS.botStatusChanged, status)
+    if (status.status === 'error') {
+      notify('botError', status.errorMessage ?? 'A conexão do bot caiu.', getMainWindow)
+    }
+  })
+
+  bot.on('lead-claimed', (info: LeadClaimedInfo) => {
+    notify(
+      'leadClaimed',
+      `${formatPhone(info.phoneJid)} disse "${info.triggerText}" em ${info.groupName}`,
+      getMainWindow
+    )
+  })
+
+  bot.on('message-sent', (info: MessageSentInfo) => {
+    notify('messageSent', `DM enviada para ${formatPhone(info.phoneJid)}`, getMainWindow)
   })
 
   ipcMain.handle(IPC_CHANNELS.listGroups, () => db.listGroups())
@@ -57,9 +73,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC_CHANNELS.listAuditLog, () => db.listAuditLog())
 
   ipcMain.handle(IPC_CHANNELS.getPreferences, () => getPreferences())
-  ipcMain.handle(IPC_CHANNELS.setPreferences, (_event, preferences: Partial<AppPreferences>) =>
-    setPreferences(preferences)
-  )
+  ipcMain.handle(IPC_CHANNELS.setPreferences, (_event, preferences: Partial<AppPreferences>) => {
+    const next = setPreferences(preferences)
+    if (preferences.theme) nativeTheme.themeSource = preferences.theme
+    return next
+  })
 
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion())
   ipcMain.handle(IPC_CHANNELS.updaterGetStatus, () => updateManager.getStatus())

@@ -6,6 +6,9 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { StatusBadge } from '@/components/StatusBadge'
 import { SupabaseConfigForm } from '@/components/SupabaseConfigForm'
 import { UpdateCard } from '@/components/UpdateCard'
+import { NotificationsCard } from '@/components/NotificationsCard'
+import { ThemeCard } from '@/components/ThemeCard'
+import { MessageCooldownCard } from '@/components/MessageCooldownCard'
 import type { BotStatusPayload, SupabaseConfig } from '../../../shared/types'
 
 export function Settings({
@@ -87,13 +90,17 @@ export function Settings({
                 onSaved={() => setSaved(true)}
               />
             )}
-            {saved && (
-              <p className="mt-4 text-sm text-emerald-600">Configuração salva com sucesso.</p>
-            )}
+            {saved && <p className="mt-4 text-sm text-success">Configuração salva com sucesso.</p>}
           </CardContent>
         </Card>
 
         <UpdateCard />
+
+        <ThemeCard />
+
+        <NotificationsCard />
+
+        <MessageCooldownCard />
 
         <Card>
           <CardHeader>

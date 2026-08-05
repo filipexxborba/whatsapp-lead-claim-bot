@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useBotStatus } from '@/hooks/useBotStatus'
+import { useThemeSync } from '@/hooks/useThemeSync'
 import { StatusBadge } from '@/components/StatusBadge'
 import { BotControlButton } from '@/components/BotControlButton'
 import { Setup } from '@/pages/Setup'
@@ -58,6 +59,7 @@ function App(): React.JSX.Element {
   const [page, setPage] = useState<Page>('dashboard')
   const [auditLogEnabled, setAuditLogEnabled] = useState(false)
   const status = useBotStatus()
+  useThemeSync()
 
   useEffect(() => {
     window.api.config.has().then(setConfigured)

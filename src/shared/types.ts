@@ -36,6 +36,7 @@ export interface ClaimedContact {
   group_name: string
   trigger_text: string
   message_sent: boolean
+  message_sent_at?: string | null
   claimed_at: string
 }
 
@@ -51,8 +52,20 @@ export interface ConnectionTestResult {
   message: string
 }
 
+export interface NotificationPreferences {
+  leadClaimed: boolean
+  messageSent: boolean
+  botError: boolean
+}
+
+export type ThemePreference = 'system' | 'light' | 'dark'
+
 export interface AppPreferences {
   auditLogEnabled: boolean
+  notifications: NotificationPreferences
+  theme: ThemePreference
+  /** Intervalo mínimo (minutos) antes de mandar outra DM pro mesmo número. */
+  messageCooldownMinutes: number
 }
 
 export type AuditEntityType = 'group' | 'trigger' | 'template'
@@ -98,6 +111,9 @@ export const IPC_CHANNELS = {
 
   getPreferences: 'preferences:get',
   setPreferences: 'preferences:set',
+
+  themeGetResolvedSync: 'theme:get-resolved-sync',
+  themeResolvedChanged: 'theme:resolved-changed',
 
   getDashboardStats: 'dashboard:get-stats',
   listAuditLog: 'audit:list',

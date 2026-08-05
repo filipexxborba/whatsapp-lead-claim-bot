@@ -8,17 +8,29 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import QRCode from 'qrcode'
-import { whatsAppAuthDir } from './configStore'
+import { whatsAppAuthDir, getPreferences } from './configStore'
 import {
   syncDiscoveredGroups,
   listActiveGroupJids,
   listActiveTriggers,
   claimContact,
-  markMessageSent
+  markMessageSent,
+  getLastMessageSentAt
 } from './supabaseClient'
 import type { BotStatusPayload, Trigger } from '../shared/types'
 
 const logger = pino({ level: 'warn' })
+
+export interface LeadClaimedInfo {
+  phoneJid: string
+  groupName: string
+  triggerText: string
+}
+
+export interface MessageSentInfo {
+  phoneJid: string
+  groupName: string
+}
 
 function extractText(message: WAMessage): string | undefined {
   const m = message.message
@@ -189,6 +201,13 @@ class WhatsAppBot extends EventEmitter {
       })
       if (!isNewClaim) return
 
+      const leadInfo: LeadClaimedInfo = {
+        phoneJid: senderPhoneJid,
+        groupName: groupMetadata.subject,
+        triggerText: matched.text
+      }
+      this.emit('lead-claimed', leadInfo)
+
       await this.socket.sendMessage(groupJid, {
         react: { text: '👍', key: message.key }
       })
@@ -199,6 +218,21 @@ class WhatsAppBot extends EventEmitter {
         return
       }
 
+      // Evita mandar a mesma DM de novo se a pessoa disparar o gatilho outra vez
+      // dentro do intervalo configurado — a reação acima já aconteceu de qualquer
+      // forma, só o envio da mensagem respeita esse cooldown.
+      const cooldownMinutes = getPreferences().messageCooldownMinutes
+      const lastSentAt = await getLastMessageSentAt(senderPhoneJid)
+      if (lastSentAt) {
+        const elapsedMs = Date.now() - new Date(lastSentAt).getTime()
+        if (elapsedMs < cooldownMinutes * 60_000) {
+          logger.info(
+            `Cooldown ativo para ${senderPhoneJid} (${cooldownMinutes}min); DM não enviada.`
+          )
+          return
+        }
+      }
+
       await sleep(randomDelayMs(3000, 8000))
 
       const body = renderTemplate(template.body, {
@@ -207,6 +241,12 @@ class WhatsAppBot extends EventEmitter {
 
       await this.socket.sendMessage(senderJid, { text: body })
       await markMessageSent(messageId)
+
+      const sentInfo: MessageSentInfo = {
+        phoneJid: senderPhoneJid,
+        groupName: groupMetadata.subject
+      }
+      this.emit('message-sent', sentInfo)
     } catch (err) {
       logger.error({ err }, 'Falha ao processar mensagem recebida')
     }
