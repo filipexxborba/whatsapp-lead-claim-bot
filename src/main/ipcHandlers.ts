@@ -1,10 +1,11 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { app, ipcMain, BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
 import type { SupabaseConfig, Trigger, MessageTemplate } from '../shared/types'
 import { getSupabaseConfig, setSupabaseConfig, hasSupabaseConfig } from './configStore'
 import { resetSupabaseClient } from './supabaseClient'
 import * as db from './supabaseClient'
 import { bot } from './bot'
+import { updateManager } from './autoUpdater'
 
 export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle(IPC_CHANNELS.getSupabaseConfig, () => getSupabaseConfig())
@@ -48,4 +49,13 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC_CHANNELS.listClaimedContacts, () => db.listClaimedContacts())
 
   ipcMain.handle(IPC_CHANNELS.getDashboardStats, () => db.getDashboardStats())
+
+  ipcMain.handle(IPC_CHANNELS.getAppVersion, () => app.getVersion())
+  ipcMain.handle(IPC_CHANNELS.updaterGetStatus, () => updateManager.getStatus())
+  ipcMain.handle(IPC_CHANNELS.updaterCheckNow, () => updateManager.checkNow())
+  ipcMain.handle(IPC_CHANNELS.updaterInstallNow, () => updateManager.installNow())
+
+  updateManager.on('status', (status) => {
+    getMainWindow()?.webContents.send(IPC_CHANNELS.updaterStatusChanged, status)
+  })
 }

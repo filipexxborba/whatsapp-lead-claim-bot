@@ -9,7 +9,8 @@ import type {
   ClaimedContact,
   BotStatusPayload,
   ConnectionTestResult,
-  DashboardStats
+  DashboardStats,
+  UpdateStatusPayload
 } from '../shared/types'
 
 const api = {
@@ -56,6 +57,18 @@ const api = {
   },
   dashboard: {
     getStats: (): Promise<DashboardStats> => ipcRenderer.invoke(IPC_CHANNELS.getDashboardStats)
+  },
+  updater: {
+    getAppVersion: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
+    getStatus: (): Promise<UpdateStatusPayload> =>
+      ipcRenderer.invoke(IPC_CHANNELS.updaterGetStatus),
+    checkNow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.updaterCheckNow),
+    installNow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.updaterInstallNow),
+    onStatusChanged: (callback: (status: UpdateStatusPayload) => void): (() => void) => {
+      const listener = (_event: unknown, status: UpdateStatusPayload): void => callback(status)
+      ipcRenderer.on(IPC_CHANNELS.updaterStatusChanged, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.updaterStatusChanged, listener)
+    }
   }
 }
 

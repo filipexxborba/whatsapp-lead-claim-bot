@@ -4,6 +4,9 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { createTray } from './tray'
 import { registerIpcHandlers } from './ipcHandlers'
+import { updateManager } from './autoUpdater'
+
+const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -56,6 +59,10 @@ app.whenReady().then(() => {
   createWindow()
   createTray(() => mainWindow)
   registerIpcHandlers(() => mainWindow)
+
+  updateManager.init()
+  updateManager.checkNow()
+  setInterval(() => updateManager.checkNow(), UPDATE_CHECK_INTERVAL_MS)
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { StatusBadge } from '@/components/StatusBadge'
 import { SupabaseConfigForm } from '@/components/SupabaseConfigForm'
+import { UpdateCard } from '@/components/UpdateCard'
 import type { BotStatusPayload, SupabaseConfig } from '../../../shared/types'
 
 export function Settings({ status }: Readonly<{ status: BotStatusPayload }>): React.JSX.Element {
@@ -80,6 +81,8 @@ export function Settings({ status }: Readonly<{ status: BotStatusPayload }>): Re
           )}
         </CardContent>
       </Card>
+
+      <UpdateCard />
     </div>
   )
 }

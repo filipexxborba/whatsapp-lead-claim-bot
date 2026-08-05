@@ -62,6 +62,16 @@ export interface DashboardStats {
   leadsByDay: { date: string; count: number }[]
 }
 
+export type UpdateStatus =
+  'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+
+export interface UpdateStatusPayload {
+  status: UpdateStatus
+  version?: string
+  progressPercent?: number
+  errorMessage?: string
+}
+
 export const IPC_CHANNELS = {
   getSupabaseConfig: 'config:get-supabase',
   setSupabaseConfig: 'config:set-supabase',
@@ -69,6 +79,12 @@ export const IPC_CHANNELS = {
   testSupabaseConfig: 'config:test-supabase',
 
   getDashboardStats: 'dashboard:get-stats',
+
+  getAppVersion: 'updater:get-app-version',
+  updaterGetStatus: 'updater:get-status',
+  updaterCheckNow: 'updater:check-now',
+  updaterInstallNow: 'updater:install-now',
+  updaterStatusChanged: 'updater:status-changed',
 
   botStart: 'bot:start',
   botPause: 'bot:pause',
