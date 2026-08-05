@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: whatsapp-lead-claim-bot
+appId: com.h2oinnovation.whatsapp-lead-claim-bot
+productName: Lead Claim Bot
 directories:
   buildResources: build
 files:
@@ -33,7 +33,7 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: filipexxborba
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}

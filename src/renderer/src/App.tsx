@@ -1,4 +1,14 @@
 import { useEffect, useState } from 'react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  LayoutDashboard,
+  Users,
+  Zap,
+  MessageSquareText,
+  Target,
+  Settings as SettingsIcon,
+  ScrollText
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useBotStatus } from '@/hooks/useBotStatus'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -11,16 +21,36 @@ import { Templates } from '@/pages/Templates'
 import { Leads } from '@/pages/Leads'
 import { Settings } from '@/pages/Settings'
 import { Audit } from '@/pages/Audit'
+import appIcon from '@/assets/icon.png'
 
 type Page = 'dashboard' | 'groups' | 'triggers' | 'templates' | 'leads' | 'settings' | 'audit'
 
-const BASE_NAV_ITEMS: { id: Page; label: string }[] = [
-  { id: 'dashboard', label: 'Painel' },
-  { id: 'groups', label: 'Grupos' },
-  { id: 'triggers', label: 'Gatilhos' },
-  { id: 'templates', label: 'Templates' },
-  { id: 'leads', label: 'Leads' },
-  { id: 'settings', label: 'Configurações' }
+interface NavItem {
+  id: Page
+  label: string
+  icon: LucideIcon
+}
+
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'Geral',
+    items: [
+      { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
+      { id: 'leads', label: 'Leads', icon: Target }
+    ]
+  },
+  {
+    label: 'Configuração do bot',
+    items: [
+      { id: 'groups', label: 'Grupos', icon: Users },
+      { id: 'triggers', label: 'Gatilhos', icon: Zap },
+      { id: 'templates', label: 'Templates', icon: MessageSquareText }
+    ]
+  },
+  {
+    label: 'Sistema',
+    items: [{ id: 'settings', label: 'Configurações', icon: SettingsIcon }]
+  }
 ]
 
 function App(): React.JSX.Element {
@@ -42,9 +72,14 @@ function App(): React.JSX.Element {
     await window.api.preferences.set({ auditLogEnabled: enabled })
   }
 
-  const navItems = auditLogEnabled
-    ? [...BASE_NAV_ITEMS, { id: 'audit' as const, label: 'Auditoria' }]
-    : BASE_NAV_ITEMS
+  const navGroups = NAV_GROUPS.map((group) =>
+    group.label === 'Sistema' && auditLogEnabled
+      ? {
+          ...group,
+          items: [...group.items, { id: 'audit' as const, label: 'Auditoria', icon: ScrollText }]
+        }
+      : group
+  )
 
   if (configured === null) {
     return (
@@ -62,24 +97,38 @@ function App(): React.JSX.Element {
     <div className="flex h-screen">
       <aside className="flex w-56 flex-col border-r bg-card">
         <div className="p-4">
-          <p className="text-sm font-semibold">Lead Claim Bot</p>
+          <div className="flex items-center gap-2">
+            <img src={appIcon} alt="" className="size-8 rounded-lg" />
+            <p className="text-sm font-semibold">Lead Claim Bot</p>
+          </div>
           <div className="mt-2">
             <StatusBadge status={status.status} />
           </div>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 p-2">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setPage(item.id)}
-              className={cn(
-                'rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent',
-                page === item.id && 'bg-accent font-medium'
-              )}
-            >
-              {item.label}
-            </button>
+        <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-2">
+          {navGroups.map((group) => (
+            <div key={group.label} className="flex flex-col gap-1">
+              <p className="px-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {group.label}
+              </p>
+              {group.items.map((item) => {
+                const Icon = item.icon
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setPage(item.id)}
+                    className={cn(
+                      'flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent',
+                      page === item.id && 'bg-accent font-medium'
+                    )}
+                  >
+                    <Icon className="size-4 shrink-0" />
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
           ))}
         </nav>
         <div className="border-t p-2">
