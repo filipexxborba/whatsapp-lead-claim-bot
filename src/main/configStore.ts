@@ -1,5 +1,5 @@
 import { app, safeStorage } from 'electron'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import type { AppPreferences, SupabaseConfig } from '../shared/types'
 
@@ -37,10 +37,17 @@ export function setSupabaseConfig(config: SupabaseConfig): void {
   writeFileSync(supabaseConfigPath(), encrypted)
 }
 
+const whatsAppAuthPath = (): string => join(app.getPath('userData'), 'whatsapp-auth')
+
 export function whatsAppAuthDir(): string {
-  const dir = join(app.getPath('userData'), 'whatsapp-auth')
+  const dir = whatsAppAuthPath()
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   return dir
+}
+
+/** Apaga as credenciais salvas localmente, forçando um QR code novo no próximo start(). */
+export function clearWhatsAppAuth(): void {
+  rmSync(whatsAppAuthPath(), { recursive: true, force: true })
 }
 
 const DEFAULT_PREFERENCES: AppPreferences = {

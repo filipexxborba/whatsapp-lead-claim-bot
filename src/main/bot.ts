@@ -8,7 +8,7 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import QRCode from 'qrcode'
-import { whatsAppAuthDir, getPreferences } from './configStore'
+import { whatsAppAuthDir, clearWhatsAppAuth, getPreferences } from './configStore'
 import {
   syncDiscoveredGroups,
   listActiveGroupJids,
@@ -270,9 +270,19 @@ class WhatsAppBot extends EventEmitter {
   async logout(): Promise<void> {
     this.paused = false
     if (this.socket) {
-      await this.socket.logout()
+      try {
+        await this.socket.logout()
+      } catch (err) {
+        // A sessão local vai ser limpa de qualquer forma logo abaixo — mesmo se
+        // o pedido de logout ao WhatsApp falhar (ex: já estava desconectado),
+        // não faz sentido travar aqui e deixar as credenciais velhas no disco.
+        logger.warn({ err }, 'Falha ao encerrar sessão no WhatsApp')
+      }
       this.socket = null
     }
+    // Sem isso, o próximo start() reusa as credenciais salvas (agora inválidas
+    // no servidor) e a conexão é rejeitada na hora, sem nunca gerar um QR novo.
+    clearWhatsAppAuth()
     this.setStatus({ status: 'disconnected' })
   }
 }
