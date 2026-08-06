@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { useUpdateStatus } from '@/hooks/useUpdateStatus'
+import { cn } from '@/lib/utils'
+
+const RELEASES_URL = 'https://github.com/filipexxborba/whatsapp-lead-claim-bot/releases/latest'
 
 function statusLabel(status: ReturnType<typeof useUpdateStatus>): string {
   switch (status.status) {
@@ -40,7 +43,14 @@ export function UpdateCard(): React.JSX.Element {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <p className="text-sm text-muted-foreground">{statusLabel(status)}</p>
+        <p
+          className={cn(
+            'text-sm',
+            status.status === 'error' ? 'text-destructive' : 'text-muted-foreground'
+          )}
+        >
+          {statusLabel(status)}
+        </p>
         <div className="flex gap-2">
           {status.status === 'downloaded' ? (
             <Button onClick={() => window.api.updater.installNow()}>
@@ -53,6 +63,13 @@ export function UpdateCard(): React.JSX.Element {
               onClick={() => window.api.updater.checkNow()}
             >
               Verificar atualizações
+            </Button>
+          )}
+          {status.status === 'error' && (
+            <Button variant="outline" asChild>
+              <a href={RELEASES_URL} target="_blank" rel="noreferrer">
+                Baixar manualmente
+              </a>
             </Button>
           )}
         </div>

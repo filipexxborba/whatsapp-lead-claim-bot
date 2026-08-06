@@ -9,6 +9,20 @@ const logger = pino({ level: 'warn' })
 autoUpdater.autoDownload = true
 autoUpdater.autoInstallOnAppQuit = false
 
+/**
+ * No macOS, o Squirrel.Mac/ShipIt exige assinatura de código válida do
+ * desenvolvedor Apple pra trocar o .app no lugar — sem certificado, essa
+ * validação falha sempre nesse ponto específico (diferente do Windows, cujo
+ * instalador NSIS funciona sem assinatura). Não dá pra contornar isso no
+ * código; só troca a mensagem técnica por uma explicação acionável.
+ */
+function friendlyUpdateErrorMessage(rawMessage: string): string {
+  if (/code signature|shipit/i.test(rawMessage)) {
+    return 'O macOS bloqueou a atualização automática porque este app ainda não tem assinatura de desenvolvedor Apple válida (exigida pelo próprio sistema). Baixe a versão mais recente manualmente pela página de releases.'
+  }
+  return rawMessage
+}
+
 class UpdateManager extends EventEmitter {
   private status: UpdateStatusPayload = { status: 'idle' }
 
@@ -44,7 +58,7 @@ class UpdateManager extends EventEmitter {
 
     autoUpdater.on('error', (err) => {
       logger.error({ err }, 'Falha ao verificar/baixar atualização')
-      this.setStatus({ status: 'error', errorMessage: err.message })
+      this.setStatus({ status: 'error', errorMessage: friendlyUpdateErrorMessage(err.message) })
     })
   }
 
