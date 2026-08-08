@@ -13,7 +13,14 @@ asarUnpack:
   - resources/**
 win:
   executableName: whatsapp-lead-claim-bot
+  target:
+    - target: nsis
+      arch:
+        - x64
 nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
