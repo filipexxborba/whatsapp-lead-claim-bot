@@ -6,6 +6,7 @@ import {
   Zap,
   MessageSquareText,
   Target,
+  Ban,
   Settings as SettingsIcon,
   ScrollText
 } from 'lucide-react'
@@ -19,12 +20,14 @@ import { Dashboard } from '@/pages/Dashboard'
 import { Groups } from '@/pages/Groups'
 import { Triggers } from '@/pages/Triggers'
 import { Templates } from '@/pages/Templates'
+import { Blacklist } from '@/pages/Blacklist'
 import { Leads } from '@/pages/Leads'
 import { Settings } from '@/pages/Settings'
 import { Audit } from '@/pages/Audit'
 import appIcon from '@/assets/icon.png'
 
-type Page = 'dashboard' | 'groups' | 'triggers' | 'templates' | 'leads' | 'settings' | 'audit'
+type Page =
+  'dashboard' | 'groups' | 'triggers' | 'templates' | 'blacklist' | 'leads' | 'settings' | 'audit'
 
 interface NavItem {
   id: Page
@@ -45,7 +48,8 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { id: 'groups', label: 'Grupos', icon: Users },
       { id: 'triggers', label: 'Gatilhos', icon: Zap },
-      { id: 'templates', label: 'Templates', icon: MessageSquareText }
+      { id: 'templates', label: 'Templates', icon: MessageSquareText },
+      { id: 'blacklist', label: 'Blacklist', icon: Ban }
     ]
   },
   {
@@ -142,6 +146,7 @@ function App(): React.JSX.Element {
         {page === 'groups' && <Groups />}
         {page === 'triggers' && <Triggers />}
         {page === 'templates' && <Templates />}
+        {page === 'blacklist' && <Blacklist />}
         {page === 'leads' && <Leads />}
         {page === 'settings' && (
           <Settings

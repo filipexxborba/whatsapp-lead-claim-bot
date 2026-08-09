@@ -10,9 +10,10 @@ import {
 } from './configStore'
 import { resetSupabaseClient } from './supabaseClient'
 import * as db from './supabaseClient'
-import { bot, type LeadClaimedInfo, type MessageSentInfo } from './bot'
+import { bot, type LeadClaimedInfo, type MessageSentInfo, type ProcessingErrorInfo } from './bot'
 import { updateManager } from './autoUpdater'
 import { notify, formatPhone } from './notifications'
+import { getLaunchAtLogin, setLaunchAtLogin } from './loginItem'
 
 export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle(IPC_CHANNELS.getSupabaseConfig, () => getSupabaseConfig())
@@ -50,6 +51,10 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     notify('messageSent', `DM enviada para ${formatPhone(info.phoneJid)}`, getMainWindow)
   })
 
+  bot.on('processing-error', (info: ProcessingErrorInfo) => {
+    notify('botError', `Falha ao processar uma mensagem: ${info.message}`, getMainWindow)
+  })
+
   ipcMain.handle(IPC_CHANNELS.listGroups, () => db.listGroups())
   ipcMain.handle(IPC_CHANNELS.toggleGroup, (_event, jid: string, active: boolean) =>
     db.toggleGroup(jid, active)
@@ -69,8 +74,22 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 
   ipcMain.handle(IPC_CHANNELS.listClaimedContacts, () => db.listClaimedContacts())
 
+  ipcMain.handle(IPC_CHANNELS.listBlacklist, () => db.listBlacklist())
+  ipcMain.handle(
+    IPC_CHANNELS.addBlacklistNumber,
+    (_event, phoneNumber: string, note?: string | null) => db.addBlacklistNumber(phoneNumber, note)
+  )
+  ipcMain.handle(IPC_CHANNELS.deleteBlacklistNumber, (_event, id: string) =>
+    db.deleteBlacklistNumber(id)
+  )
+
   ipcMain.handle(IPC_CHANNELS.getDashboardStats, () => db.getDashboardStats())
   ipcMain.handle(IPC_CHANNELS.listAuditLog, () => db.listAuditLog())
+
+  ipcMain.handle(IPC_CHANNELS.getLaunchAtLogin, () => getLaunchAtLogin())
+  ipcMain.handle(IPC_CHANNELS.setLaunchAtLogin, (_event, enabled: boolean) =>
+    setLaunchAtLogin(enabled)
+  )
 
   ipcMain.handle(IPC_CHANNELS.getPreferences, () => getPreferences())
   ipcMain.handle(IPC_CHANNELS.setPreferences, (_event, preferences: Partial<AppPreferences>) => {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -9,6 +10,7 @@ import { UpdateCard } from '@/components/UpdateCard'
 import { NotificationsCard } from '@/components/NotificationsCard'
 import { ThemeCard } from '@/components/ThemeCard'
 import { MessageCooldownCard } from '@/components/MessageCooldownCard'
+import { LaunchAtLoginCard } from '@/components/LaunchAtLoginCard'
 import type { BotStatusPayload, SupabaseConfig } from '../../../shared/types'
 
 export function Settings({
@@ -22,15 +24,25 @@ export function Settings({
 }>): React.JSX.Element {
   const [config, setConfig] = useState<SupabaseConfig | null>(null)
   const [saved, setSaved] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const isIdle = status.status === 'disconnected' || status.status === 'error'
 
   useEffect(() => {
     window.api.config.get().then(setConfig)
   }, [])
 
+  async function handleLogout(): Promise<void> {
+    setLoggingOut(true)
+    try {
+      await window.api.bot.logout()
+    } finally {
+      setLoggingOut(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6">
-      <div className="grid items-start gap-6 lg:grid-cols-2">
+      <div className="flex flex-col gap-6">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -62,8 +74,9 @@ export function Settings({
 
             {!isIdle && (
               <div>
-                <Button variant="outline" onClick={() => window.api.bot.logout()}>
-                  Desconectar número (novo QR)
+                <Button variant="outline" onClick={handleLogout} disabled={loggingOut}>
+                  {loggingOut && <Loader2 className="animate-spin" />}
+                  {loggingOut ? 'Desconectando...' : 'Desconectar número (novo QR)'}
                 </Button>
               </div>
             )}
@@ -95,6 +108,8 @@ export function Settings({
         </Card>
 
         <UpdateCard />
+
+        <LaunchAtLoginCard />
 
         <ThemeCard />
 

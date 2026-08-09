@@ -13,14 +13,24 @@ const OPTIONS: { value: ThemePreference; label: string; icon: typeof Monitor }[]
 
 export function ThemeCard(): React.JSX.Element {
   const [theme, setTheme] = useState<ThemePreference | null>(null)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     window.api.preferences.get().then((preferences) => setTheme(preferences.theme))
   }, [])
 
   async function handleChange(value: ThemePreference): Promise<void> {
+    const previous = theme
     setTheme(value)
-    await window.api.preferences.set({ theme: value })
+    setSaving(true)
+    try {
+      await window.api.preferences.set({ theme: value })
+    } catch (err) {
+      console.error(err)
+      setTheme(previous)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -38,6 +48,7 @@ export function ThemeCard(): React.JSX.Element {
               size="sm"
               variant={theme === value ? 'default' : 'ghost'}
               className={cn('gap-1.5', theme !== value && 'text-muted-foreground')}
+              disabled={saving}
               onClick={() => handleChange(value)}
             >
               <Icon className="size-3.5" />

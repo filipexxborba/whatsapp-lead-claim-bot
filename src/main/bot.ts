@@ -6,20 +6,25 @@ import makeWASocket, {
   type WAMessage
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
-import pino from 'pino'
 import QRCode from 'qrcode'
 import { whatsAppAuthDir, clearWhatsAppAuth, getPreferences } from './configStore'
+import { logger as rootLogger } from './logger'
 import {
   syncDiscoveredGroups,
   listActiveGroupJids,
   listActiveTriggers,
+  listBlacklistedPhoneNumbers,
   claimContact,
   markMessageSent,
   getLastMessageSentAt
 } from './supabaseClient'
 import type { BotStatusPayload, Trigger } from '../shared/types'
 
-const logger = pino({ level: 'warn' })
+const logger = rootLogger.child({ module: 'bot' })
+// Nível separado (warn) do logger que passamos pro Baileys: os logs internos
+// dele em 'info'/'debug' são bem verbosos e não é isso que queremos gravando
+// sem parar no arquivo compartilhado.
+const baileysLogger = rootLogger.child({ module: 'baileys' }, { level: 'warn' })
 
 export interface LeadClaimedInfo {
   phoneJid: string
@@ -30,6 +35,10 @@ export interface LeadClaimedInfo {
 export interface MessageSentInfo {
   phoneJid: string
   groupName: string
+}
+
+export interface ProcessingErrorInfo {
+  message: string
 }
 
 function extractText(message: WAMessage): string | undefined {
@@ -64,11 +73,25 @@ function randomDelayMs(minMs: number, maxMs: number): number {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
+// Sem backoff, uma queda de conexão persistente (instabilidade de rede, ou o
+// próprio WhatsApp recusando temporariamente) vira um loop de reconexão sem
+// pausa — o tipo de padrão que piora a situação em vez de esperar ela passar.
+const MAX_RECONNECT_DELAY_MS = 60_000
+
+// Teto de mensagens novas (primeiro contato) que o bot manda numa janela de
+// tempo, independente do cooldown por número. O cooldown evita repetir a
+// mesma pessoa; isso aqui evita uma rajada de dezenas de DMs em minutos
+// quando um grupo bomba — o padrão mais comum de denúncia/bloqueio por spam.
+const MAX_NEW_MESSAGES_PER_WINDOW = 6
+const SEND_WINDOW_MS = 5 * 60_000
+
 class WhatsAppBot extends EventEmitter {
   private socket: WASocket | null = null
   private paused = false
   private status: BotStatusPayload = { status: 'disconnected' }
   private starting = false
+  private reconnectAttempts = 0
+  private sentTimestamps: number[] = []
 
   getStatus(): BotStatusPayload {
     return this.status
@@ -89,7 +112,7 @@ class WhatsAppBot extends EventEmitter {
 
       const socket = makeWASocket({
         auth: state,
-        logger,
+        logger: baileysLogger,
         printQRInTerminal: false
       })
       this.socket = socket
@@ -127,6 +150,7 @@ class WhatsAppBot extends EventEmitter {
 
     if (connection === 'open') {
       this.starting = false
+      this.reconnectAttempts = 0
       const ownNumber = this.socket?.user?.id?.split(':')[0]
       this.setStatus({ status: 'connected', connectedNumber: ownNumber })
       await this.discoverGroups()
@@ -140,7 +164,13 @@ class WhatsAppBot extends EventEmitter {
       this.socket = null
 
       if (shouldReconnect && !this.paused) {
+        this.reconnectAttempts++
+        const delayMs = Math.min(MAX_RECONNECT_DELAY_MS, 1000 * 2 ** (this.reconnectAttempts - 1))
+        logger.warn(
+          `Reconectando em ${Math.round(delayMs / 1000)}s (tentativa ${this.reconnectAttempts}).`
+        )
         this.setStatus({ status: 'connecting' })
+        await sleep(delayMs)
         await this.start()
       } else {
         this.setStatus({ status: 'disconnected' })
@@ -156,6 +186,30 @@ class WhatsAppBot extends EventEmitter {
       await syncDiscoveredGroups(groups)
     } catch (err) {
       logger.warn({ err }, 'Falha ao sincronizar grupos do WhatsApp')
+    }
+  }
+
+  /** true se o grupo não está ativo ou o remetente está na blacklist — em ambos os casos, ignora a mensagem. */
+  private async shouldSkipMessage(groupJid: string, senderPhoneNumber: string): Promise<boolean> {
+    const [activeGroupJids, blacklistedNumbers] = await Promise.all([
+      listActiveGroupJids(),
+      listBlacklistedPhoneNumbers()
+    ])
+    return !activeGroupJids.has(groupJid) || blacklistedNumbers.has(senderPhoneNumber)
+  }
+
+  /** Bloqueia até haver espaço na janela de envio, espaçando rajadas de DMs novas. */
+  private async waitForSendSlot(): Promise<void> {
+    for (;;) {
+      const now = Date.now()
+      this.sentTimestamps = this.sentTimestamps.filter((t) => now - t < SEND_WINDOW_MS)
+      if (this.sentTimestamps.length < MAX_NEW_MESSAGES_PER_WINDOW) {
+        this.sentTimestamps.push(now)
+        return
+      }
+      const waitMs = SEND_WINDOW_MS - (now - this.sentTimestamps[0]) + 250
+      logger.info(`Limite de mensagens novas atingido; aguardando ${Math.ceil(waitMs / 1000)}s.`)
+      await sleep(waitMs)
     }
   }
 
@@ -180,8 +234,8 @@ class WhatsAppBot extends EventEmitter {
     if (!text) return
 
     try {
-      const activeGroupJids = await listActiveGroupJids()
-      if (!activeGroupJids.has(groupJid)) return
+      const senderPhoneNumber = senderPhoneJid.split('@')[0]
+      if (await this.shouldSkipMessage(groupJid, senderPhoneNumber)) return
 
       const triggers = await listActiveTriggers()
       const matched = matchesTrigger(text, triggers)
@@ -233,6 +287,7 @@ class WhatsAppBot extends EventEmitter {
         }
       }
 
+      await this.waitForSendSlot()
       await sleep(randomDelayMs(3000, 8000))
 
       const body = renderTemplate(template.body, {
@@ -249,6 +304,8 @@ class WhatsAppBot extends EventEmitter {
       this.emit('message-sent', sentInfo)
     } catch (err) {
       logger.error({ err }, 'Falha ao processar mensagem recebida')
+      const info: ProcessingErrorInfo = { message: (err as Error).message }
+      this.emit('processing-error', info)
     }
   }
 

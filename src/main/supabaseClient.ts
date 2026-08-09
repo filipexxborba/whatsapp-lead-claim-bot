@@ -1,11 +1,12 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import pino from 'pino'
+import { logger as rootLogger } from './logger'
 import { getSupabaseConfig } from './configStore'
 import type {
   WhatsAppGroup,
   Trigger,
   MessageTemplate,
   ClaimedContact,
+  BlacklistedNumber,
   SupabaseConfig,
   ConnectionTestResult,
   DashboardStats,
@@ -14,7 +15,12 @@ import type {
   AuditLogEntry
 } from '../shared/types'
 
-const logger = pino({ level: 'warn' })
+/** Mantém só os dígitos, pra casar com o JID do WhatsApp (que também é dígitos antes do "@"). */
+export function normalizePhoneNumber(value: string): string {
+  return value.replace(/\D/g, '')
+}
+
+const logger = rootLogger.child({ module: 'supabase' })
 
 let client: SupabaseClient | null = null
 
@@ -380,6 +386,50 @@ export async function listClaimedContacts(limit = 200): Promise<ClaimedContact[]
     .limit(limit)
   if (error) throw error
   return data as ClaimedContact[]
+}
+
+// --- Blacklist ---
+
+export async function listBlacklist(): Promise<BlacklistedNumber[]> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from('blacklisted_numbers')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data as BlacklistedNumber[]
+}
+
+export async function addBlacklistNumber(phoneNumber: string, note?: string | null): Promise<void> {
+  const supabase = getSupabase()
+  const record = { phone_number: normalizePhoneNumber(phoneNumber), note: note?.trim() || null }
+  const { data: after, error } = await supabase
+    .from('blacklisted_numbers')
+    .insert(record)
+    .select()
+    .single()
+  if (error) throw error
+  await logAudit('blacklist', after.id, 'created', null, after)
+}
+
+export async function deleteBlacklistNumber(id: string): Promise<void> {
+  const supabase = getSupabase()
+  const { data: before } = await supabase
+    .from('blacklisted_numbers')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+  const { error } = await supabase.from('blacklisted_numbers').delete().eq('id', id)
+  if (error) throw error
+  await logAudit('blacklist', id, 'deleted', before, null)
+}
+
+/** Usado pelo bot a cada mensagem recebida, pra decidir se ignora o remetente. */
+export async function listBlacklistedPhoneNumbers(): Promise<Set<string>> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase.from('blacklisted_numbers').select('phone_number')
+  if (error) throw error
+  return new Set((data ?? []).map((row) => row.phone_number as string))
 }
 
 // --- Audit log ---

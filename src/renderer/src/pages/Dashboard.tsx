@@ -18,6 +18,8 @@ export function Dashboard({
 
   return (
     <div className="flex flex-col gap-6 p-6">
+      {!stats && <p className="text-sm text-muted-foreground">Carregando...</p>}
+
       {stats && <OnboardingChecklist stats={stats} onNavigate={onNavigate} />}
 
       {stats && (

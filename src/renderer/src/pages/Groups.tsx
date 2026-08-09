@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +18,7 @@ export function Groups(): React.JSX.Element {
   const [groups, setGroups] = useState<WhatsAppGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [togglingJid, setTogglingJid] = useState<string | null>(null)
 
   async function load(): Promise<void> {
     setLoading(true)
@@ -31,14 +33,81 @@ export function Groups(): React.JSX.Element {
     return [...filtered].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
   }, [groups, search])
 
+  const isInitialLoading = loading && groups.length === 0
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch from Electron IPC on mount
     void load()
   }, [])
 
   async function handleToggle(jid: string, active: boolean): Promise<void> {
+    const previous = groups
     setGroups((prev) => prev.map((g) => (g.jid === jid ? { ...g, active } : g)))
-    await window.api.groups.toggle(jid, active)
+    setTogglingJid(jid)
+    try {
+      await window.api.groups.toggle(jid, active)
+    } catch (err) {
+      console.error(err)
+      setGroups(previous)
+    } finally {
+      setTogglingJid(null)
+    }
+  }
+
+  let listContent: React.JSX.Element
+  if (isInitialLoading) {
+    listContent = <p className="text-sm text-muted-foreground">Carregando...</p>
+  } else if (groups.length === 0) {
+    listContent = (
+      <p className="text-sm text-muted-foreground">
+        Nenhum grupo encontrado ainda. Conecte o bot na aba Painel para descobrir os grupos
+        automaticamente.
+      </p>
+    )
+  } else {
+    listContent = (
+      <>
+        <Input
+          placeholder="Buscar grupo pelo nome..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-sm"
+        />
+        {visibleGroups.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nenhum grupo encontrado para &quot;{search}&quot;.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Grupo</TableHead>
+                <TableHead className="w-32 text-right">Ativo</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleGroups.map((group) => (
+                <TableRow key={group.jid}>
+                  <TableCell>{group.name}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      {togglingJid === group.jid && (
+                        <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                      )}
+                      <Switch
+                        checked={group.active}
+                        disabled={togglingJid === group.jid}
+                        onCheckedChange={(checked) => handleToggle(group.jid, checked)}
+                      />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </>
+    )
   }
 
   return (
@@ -54,54 +123,12 @@ export function Groups(): React.JSX.Element {
               </CardDescription>
             </div>
             <Button variant="outline" onClick={load} disabled={loading} className="shrink-0">
+              {loading && <Loader2 className="animate-spin" />}
               Atualizar lista
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {groups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhum grupo encontrado ainda. Conecte o bot na aba Painel para descobrir os grupos
-              automaticamente.
-            </p>
-          ) : (
-            <>
-              <Input
-                placeholder="Buscar grupo pelo nome..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="max-w-sm"
-              />
-              {visibleGroups.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Nenhum grupo encontrado para &quot;{search}&quot;.
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Grupo</TableHead>
-                      <TableHead className="w-32 text-right">Ativo</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visibleGroups.map((group) => (
-                      <TableRow key={group.jid}>
-                        <TableCell>{group.name}</TableCell>
-                        <TableCell className="text-right">
-                          <Switch
-                            checked={group.active}
-                            onCheckedChange={(checked) => handleToggle(group.jid, checked)}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </>
-          )}
-        </CardContent>
+        <CardContent className="flex flex-col gap-4">{listContent}</CardContent>
       </Card>
     </div>
   )

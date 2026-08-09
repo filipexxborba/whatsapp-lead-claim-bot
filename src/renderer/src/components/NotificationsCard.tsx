@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
@@ -24,6 +25,7 @@ const OPTIONS: { key: keyof NotificationPreferences; label: string; description:
 
 export function NotificationsCard(): React.JSX.Element {
   const [notifications, setNotifications] = useState<NotificationPreferences | null>(null)
+  const [pendingKey, setPendingKey] = useState<keyof NotificationPreferences | null>(null)
 
   useEffect(() => {
     window.api.preferences.get().then((preferences) => setNotifications(preferences.notifications))
@@ -31,9 +33,17 @@ export function NotificationsCard(): React.JSX.Element {
 
   async function handleToggle(key: keyof NotificationPreferences, value: boolean): Promise<void> {
     if (!notifications) return
-    const next = { ...notifications, [key]: value }
-    setNotifications(next)
-    await window.api.preferences.set({ notifications: next })
+    const previous = notifications
+    setNotifications({ ...notifications, [key]: value })
+    setPendingKey(key)
+    try {
+      await window.api.preferences.set({ notifications: { ...notifications, [key]: value } })
+    } catch (err) {
+      console.error(err)
+      setNotifications(previous)
+    } finally {
+      setPendingKey(null)
+    }
   }
 
   return (
@@ -52,8 +62,12 @@ export function NotificationsCard(): React.JSX.Element {
               <Switch
                 id={`notif-${option.key}`}
                 checked={notifications[option.key]}
+                disabled={pendingKey === option.key}
                 onCheckedChange={(checked) => handleToggle(option.key, checked)}
               />
+              {pendingKey === option.key && (
+                <Loader2 className="-ml-1.5 size-3.5 shrink-0 animate-spin text-muted-foreground" />
+              )}
               <div>
                 <Label htmlFor={`notif-${option.key}`}>{option.label}</Label>
                 <p className="text-xs text-muted-foreground">{option.description}</p>

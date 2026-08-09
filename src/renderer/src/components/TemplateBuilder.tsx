@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Bold, Italic, Strikethrough, Code, Braces, CheckCheck } from 'lucide-react'
+import { Bold, Italic, Strikethrough, Code, Braces, CheckCheck, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -51,6 +51,7 @@ export function TemplateBuilder({
   const [name, setName] = useState('')
   const [body, setBody] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const previewHtml = useMemo(() => renderPreviewHtml(body), [body])
@@ -59,6 +60,7 @@ export function TemplateBuilder({
   function reset(): void {
     setName('')
     setBody('')
+    setError(null)
   }
 
   function applyToSelection({ prefix, suffix }: Marker): void {
@@ -93,11 +95,14 @@ export function TemplateBuilder({
   async function handleCreate(): Promise<void> {
     if (!name.trim() || !body.trim()) return
     setSaving(true)
+    setError(null)
     try {
       await window.api.templates.upsert({ name: name.trim(), body: body.trim() })
       reset()
       setOpen(false)
       await onCreated()
+    } catch (err) {
+      setError((err as Error).message)
     } finally {
       setSaving(false)
     }
@@ -208,11 +213,14 @@ export function TemplateBuilder({
           </div>
         </div>
 
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancelar
           </Button>
           <Button onClick={handleCreate} disabled={saving || !name.trim() || !body.trim()}>
+            {saving && <Loader2 className="animate-spin" />}
             {saving ? 'Salvando...' : 'Salvar template'}
           </Button>
         </DialogFooter>

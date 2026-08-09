@@ -7,6 +7,7 @@ import type {
   Trigger,
   MessageTemplate,
   ClaimedContact,
+  BlacklistedNumber,
   BotStatusPayload,
   ConnectionTestResult,
   DashboardStats,
@@ -61,11 +62,23 @@ const api = {
   contacts: {
     list: (): Promise<ClaimedContact[]> => ipcRenderer.invoke(IPC_CHANNELS.listClaimedContacts)
   },
+  blacklist: {
+    list: (): Promise<BlacklistedNumber[]> => ipcRenderer.invoke(IPC_CHANNELS.listBlacklist),
+    add: (phoneNumber: string, note?: string | null): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.addBlacklistNumber, phoneNumber, note),
+    delete: (id: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.deleteBlacklistNumber, id)
+  },
   dashboard: {
     getStats: (): Promise<DashboardStats> => ipcRenderer.invoke(IPC_CHANNELS.getDashboardStats)
   },
   audit: {
     list: (): Promise<AuditLogEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.listAuditLog)
+  },
+  system: {
+    getLaunchAtLogin: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.getLaunchAtLogin),
+    setLaunchAtLogin: (enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.setLaunchAtLogin, enabled)
   },
   updater: {
     getAppVersion: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),

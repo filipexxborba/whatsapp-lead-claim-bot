@@ -29,6 +29,13 @@ export interface MessageTemplate {
   created_at?: string
 }
 
+export interface BlacklistedNumber {
+  id: string
+  phone_number: string
+  note: string | null
+  created_at: string
+}
+
 export interface ClaimedContact {
   id: string
   phone_jid: string
@@ -68,7 +75,7 @@ export interface AppPreferences {
   messageCooldownMinutes: number
 }
 
-export type AuditEntityType = 'group' | 'trigger' | 'template'
+export type AuditEntityType = 'group' | 'trigger' | 'template' | 'blacklist'
 export type AuditAction = 'created' | 'updated' | 'deleted'
 
 export interface AuditLogEntry {
@@ -118,6 +125,9 @@ export const IPC_CHANNELS = {
   getDashboardStats: 'dashboard:get-stats',
   listAuditLog: 'audit:list',
 
+  getLaunchAtLogin: 'system:get-launch-at-login',
+  setLaunchAtLogin: 'system:set-launch-at-login',
+
   getAppVersion: 'updater:get-app-version',
   updaterGetStatus: 'updater:get-status',
   updaterCheckNow: 'updater:check-now',
@@ -142,5 +152,9 @@ export const IPC_CHANNELS = {
   upsertTemplate: 'templates:upsert',
   deleteTemplate: 'templates:delete',
 
-  listClaimedContacts: 'contacts:list'
+  listClaimedContacts: 'contacts:list',
+
+  listBlacklist: 'blacklist:list',
+  addBlacklistNumber: 'blacklist:add',
+  deleteBlacklistNumber: 'blacklist:delete'
 } as const

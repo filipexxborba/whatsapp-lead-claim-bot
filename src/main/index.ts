@@ -12,9 +12,19 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { updateManager } from './autoUpdater'
 import { getPreferences } from './configStore'
+import { wasLaunchedHidden } from './loginItem'
 import { IPC_CHANNELS } from '../shared/types'
 
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+
+// Sem isso, abrir o instalador/atalho duas vezes (ou o login do SO reabrir o
+// app enquanto ele já está na bandeja) sobe um segundo processo Baileys
+// disputando o mesmo arquivo de credenciais do WhatsApp com o primeiro — risco
+// real de corromper a sessão. Precisa ser a primeira coisa que o processo faz.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
 
 // Sem isso, um erro não tratado ao iniciar mata o processo em silêncio — quem
 // abriu o app com duplo clique só vê a janela "piscar" e fechar, sem nenhuma
@@ -44,7 +54,9 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
+    // Se foi aberto pelo login do sistema (--hidden), fica só na bandeja —
+    // é exatamente o ponto de "abrir automaticamente" sem poluir a tela no boot.
+    if (!wasLaunchedHidden()) mainWindow?.show()
   })
 
   // Fechar a janela só esconde o painel — o bot continua rodando em segundo
@@ -68,70 +80,82 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(async () => {
-  try {
-    electronApp.setAppUserModelId('com.h2oinnovation.whatsapp-lead-claim-bot')
+if (gotSingleInstanceLock) {
+  // Disparado no processo que já tem a trava, quando alguém tenta abrir uma
+  // segunda instância — em vez de deixar o pedido cair no vazio, traz a janela
+  // já existente pra frente.
+  app.on('second-instance', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
 
-    app.on('browser-window-created', (_, window) => {
-      optimizer.watchWindowShortcuts(window)
-    })
+  app.whenReady().then(async () => {
+    try {
+      electronApp.setAppUserModelId('com.h2oinnovation.whatsapp-lead-claim-bot')
 
-    // Registrado cedo (não dentro de ipcHandlers.ts, carregado sob demanda depois)
-    // porque o preload precisa ler o tema de forma síncrona antes do primeiro
-    // paint, pra não piscar o tema errado por uma fração de segundo.
-    nativeTheme.themeSource = getPreferences().theme
-    ipcMain.on(IPC_CHANNELS.themeGetResolvedSync, (event) => {
-      event.returnValue = nativeTheme.shouldUseDarkColors
-    })
-    nativeTheme.on('updated', () => {
-      mainWindow?.webContents.send(
-        IPC_CHANNELS.themeResolvedChanged,
-        nativeTheme.shouldUseDarkColors
-      )
-    })
+      app.on('browser-window-created', (_, window) => {
+        optimizer.watchWindowShortcuts(window)
+      })
 
-    // Carregados só agora (não no topo do arquivo): tray e ipcHandlers puxam o
-    // Baileys, que é pesado pra carregar. Assim a janela já aparece antes, e se
-    // essa parte falhar, cai no catch abaixo em vez de matar o processo antes de
-    // qualquer coisa aparecer na tela.
-    createWindow()
+      // Registrado cedo (não dentro de ipcHandlers.ts, carregado sob demanda depois)
+      // porque o preload precisa ler o tema de forma síncrona antes do primeiro
+      // paint, pra não piscar o tema errado por uma fração de segundo.
+      nativeTheme.themeSource = getPreferences().theme
+      ipcMain.on(IPC_CHANNELS.themeGetResolvedSync, (event) => {
+        event.returnValue = nativeTheme.shouldUseDarkColors
+      })
+      nativeTheme.on('updated', () => {
+        mainWindow?.webContents.send(
+          IPC_CHANNELS.themeResolvedChanged,
+          nativeTheme.shouldUseDarkColors
+        )
+      })
 
-    const [{ createTray }, { registerIpcHandlers }] = await Promise.all([
-      import('./tray'),
-      import('./ipcHandlers')
-    ])
-    createTray(() => mainWindow)
-    registerIpcHandlers(() => mainWindow)
+      // Carregados só agora (não no topo do arquivo): tray e ipcHandlers puxam o
+      // Baileys, que é pesado pra carregar. Assim a janela já aparece antes, e se
+      // essa parte falhar, cai no catch abaixo em vez de matar o processo antes de
+      // qualquer coisa aparecer na tela.
+      createWindow()
 
-    updateManager.init()
-    updateManager.checkNow()
-    setInterval(() => updateManager.checkNow(), UPDATE_CHECK_INTERVAL_MS)
+      const [{ createTray }, { registerIpcHandlers }] = await Promise.all([
+        import('./tray'),
+        import('./ipcHandlers')
+      ])
+      createTray(() => mainWindow)
+      registerIpcHandlers(() => mainWindow)
 
-    app.on('activate', function () {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
-      else mainWindow?.show()
-    })
-  } catch (err) {
-    reportFatalError('Falha ao inicializar', err)
-  }
-})
+      updateManager.init()
+      updateManager.checkNow()
+      setInterval(() => updateManager.checkNow(), UPDATE_CHECK_INTERVAL_MS)
 
-app.on('before-quit', () => {
-  isQuitting = true
-})
+      app.on('activate', function () {
+        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+        else mainWindow?.show()
+      })
+    } catch (err) {
+      reportFatalError('Falha ao inicializar', err)
+    }
+  })
 
-// electron-updater emite isso (no autoUpdater nativo do Electron, não no dele
-// próprio) logo antes de chamar app.quit() dentro de quitAndInstall(). Marcamos
-// isQuitting aqui também, de propósito redundante com o listener acima, pra não
-// depender de nenhuma suposição sobre ordem de eventos — sem isso, se por
-// algum motivo o "close" da janela rodar antes do "before-quit", a janela só
-// esconde (comportamento normal de fechar) e a atualização nunca reinicia o app.
-nativeAutoUpdater.on('before-quit-for-update', () => {
-  isQuitting = true
-})
+  app.on('before-quit', () => {
+    isQuitting = true
+  })
 
-// O app fica na bandeja mesmo com todas as janelas fechadas, em qualquer
-// plataforma, para o bot continuar escutando os grupos em segundo plano.
-app.on('window-all-closed', () => {
-  // Intencionalmente vazio: não chamamos app.quit() aqui.
-})
+  // electron-updater emite isso (no autoUpdater nativo do Electron, não no dele
+  // próprio) logo antes de chamar app.quit() dentro de quitAndInstall(). Marcamos
+  // isQuitting aqui também, de propósito redundante com o listener acima, pra não
+  // depender de nenhuma suposição sobre ordem de eventos — sem isso, se por
+  // algum motivo o "close" da janela rodar antes do "before-quit", a janela só
+  // esconde (comportamento normal de fechar) e a atualização nunca reinicia o app.
+  nativeAutoUpdater.on('before-quit-for-update', () => {
+    isQuitting = true
+  })
+
+  // O app fica na bandeja mesmo com todas as janelas fechadas, em qualquer
+  // plataforma, para o bot continuar escutando os grupos em segundo plano.
+  app.on('window-all-closed', () => {
+    // Intencionalmente vazio: não chamamos app.quit() aqui.
+  })
+}

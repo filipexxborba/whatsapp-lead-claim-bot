@@ -1,10 +1,10 @@
 import { EventEmitter } from 'node:events'
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
-import pino from 'pino'
+import { logger as rootLogger } from './logger'
 import type { UpdateStatusPayload } from '../shared/types'
 
-const logger = pino({ level: 'warn' })
+const logger = rootLogger.child({ module: 'updater' })
 
 autoUpdater.autoDownload = true
 autoUpdater.autoInstallOnAppQuit = false

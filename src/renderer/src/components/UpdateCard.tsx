@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { useUpdateStatus } from '@/hooks/useUpdateStatus'
@@ -28,11 +29,22 @@ function statusLabel(status: ReturnType<typeof useUpdateStatus>): string {
 export function UpdateCard(): React.JSX.Element {
   const status = useUpdateStatus()
   const [appVersion, setAppVersion] = useState<string | null>(null)
+  const [installing, setInstalling] = useState(false)
   const isBusy = status.status === 'checking' || status.status === 'downloading'
 
   useEffect(() => {
     window.api.updater.getAppVersion().then(setAppVersion)
   }, [])
+
+  async function handleInstallNow(): Promise<void> {
+    setInstalling(true)
+    try {
+      await window.api.updater.installNow()
+    } catch (err) {
+      console.error(err)
+      setInstalling(false)
+    }
+  }
 
   return (
     <Card>
@@ -53,8 +65,9 @@ export function UpdateCard(): React.JSX.Element {
         </p>
         <div className="flex gap-2">
           {status.status === 'downloaded' ? (
-            <Button onClick={() => window.api.updater.installNow()}>
-              Reiniciar e atualizar agora
+            <Button onClick={handleInstallNow} disabled={installing}>
+              {installing && <Loader2 className="animate-spin" />}
+              {installing ? 'Reiniciando...' : 'Reiniciar e atualizar agora'}
             </Button>
           ) : (
             <Button
@@ -62,6 +75,7 @@ export function UpdateCard(): React.JSX.Element {
               disabled={isBusy}
               onClick={() => window.api.updater.checkNow()}
             >
+              {isBusy && <Loader2 className="animate-spin" />}
               Verificar atualizações
             </Button>
           )}

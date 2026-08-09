@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { TriangleAlert } from 'lucide-react'
+import { TriangleAlert, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,6 +21,8 @@ function formatMinutes(minutes: number): string {
 export function MessageCooldownCard(): React.JSX.Element {
   const [minutes, setMinutes] = useState<number | null>(null)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     window.api.preferences
@@ -31,8 +33,16 @@ export function MessageCooldownCard(): React.JSX.Element {
   async function handleSave(): Promise<void> {
     if (minutes === null || !Number.isFinite(minutes) || minutes < 1) return
     setSaved(false)
-    await window.api.preferences.set({ messageCooldownMinutes: minutes })
-    setSaved(true)
+    setSaving(true)
+    setError(null)
+    try {
+      await window.api.preferences.set({ messageCooldownMinutes: minutes })
+      setSaved(true)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -60,8 +70,9 @@ export function MessageCooldownCard(): React.JSX.Element {
           <span className="text-sm text-muted-foreground">
             minutos{minutes ? ` (${formatMinutes(minutes)})` : ''}
           </span>
-          <Button size="sm" variant="outline" onClick={handleSave}>
-            Salvar
+          <Button size="sm" variant="outline" onClick={handleSave} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />}
+            {saving ? 'Salvando...' : 'Salvar'}
           </Button>
         </div>
 
@@ -75,6 +86,7 @@ export function MessageCooldownCard(): React.JSX.Element {
         </div>
 
         {saved && <p className="text-xs text-success">Salvo.</p>}
+        {error && <p className="text-xs text-destructive">{error}</p>}
       </CardContent>
     </Card>
   )

@@ -54,19 +54,35 @@ alter table claimed_contacts add column if not exists message_sent_at timestampt
 create index if not exists claimed_contacts_claimed_at_idx on claimed_contacts (claimed_at desc);
 create index if not exists claimed_contacts_phone_jid_idx on claimed_contacts (phone_jid);
 
--- Auditoria: toda mudança de configuração (grupo, gatilho, template) fica registrada
--- aqui pelo próprio app, com o estado antes/depois em jsonb. Não guarda leads
+-- Números bloqueados: nunca recebem reação nem DM, mesmo que disparem um gatilho.
+-- phone_number guarda só dígitos (sem @s.whatsapp.net), pra casar direto com o JID
+-- do remetente (que o WhatsApp também expõe como dígitos antes do "@").
+create table if not exists blacklisted_numbers (
+  id uuid primary key default gen_random_uuid(),
+  phone_number text not null unique,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+-- Auditoria: toda mudança de configuração (grupo, gatilho, template, número bloqueado) fica
+-- registrada aqui pelo próprio app, com o estado antes/depois em jsonb. Não guarda leads
 -- (claimed_contacts já é seu próprio histórico) nem quem fez, já que não há login
 -- de usuário — só existe uma anon key por cliente.
 create table if not exists audit_log (
   id uuid primary key default gen_random_uuid(),
-  entity_type text not null check (entity_type in ('group', 'trigger', 'template')),
+  entity_type text not null check (entity_type in ('group', 'trigger', 'template', 'blacklist')),
   entity_id text not null,
   action text not null check (action in ('created', 'updated', 'deleted')),
   before jsonb,
   after jsonb,
   created_at timestamptz not null default now()
 );
+
+-- Migração para projetos que rodaram este script antes de o audit_log aceitar
+-- entity_type = 'blacklist'.
+alter table audit_log drop constraint if exists audit_log_entity_type_check;
+alter table audit_log add constraint audit_log_entity_type_check
+  check (entity_type in ('group', 'trigger', 'template', 'blacklist'));
 
 create index if not exists audit_log_entity_idx on audit_log (entity_type, entity_id);
 create index if not exists audit_log_created_at_idx on audit_log (created_at desc);
@@ -83,6 +99,7 @@ grant select, insert, update on public.whatsapp_groups to anon;
 grant select, insert, update, delete on public.triggers to anon;
 grant select, insert, update, delete on public.message_templates to anon;
 grant select, insert, update on public.claimed_contacts to anon;
+grant select, insert, delete on public.blacklisted_numbers to anon;
 -- Só select+insert em audit_log (nunca update/delete): o log é append-only por design.
 grant select, insert on public.audit_log to anon;
 
@@ -93,6 +110,7 @@ alter table whatsapp_groups enable row level security;
 alter table triggers enable row level security;
 alter table message_templates enable row level security;
 alter table claimed_contacts enable row level security;
+alter table blacklisted_numbers enable row level security;
 alter table audit_log enable row level security;
 
 drop policy if exists "anon full access" on whatsapp_groups;
@@ -106,6 +124,9 @@ create policy "anon full access" on message_templates for all to anon using (tru
 
 drop policy if exists "anon full access" on claimed_contacts;
 create policy "anon full access" on claimed_contacts for all to anon using (true) with check (true);
+
+drop policy if exists "anon full access" on blacklisted_numbers;
+create policy "anon full access" on blacklisted_numbers for all to anon using (true) with check (true);
 
 drop policy if exists "anon read" on audit_log;
 create policy "anon read" on audit_log for select to anon using (true);
