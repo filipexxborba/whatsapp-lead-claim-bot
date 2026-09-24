@@ -91,6 +91,10 @@ class WhatsAppBot extends EventEmitter {
   private status: BotStatusPayload = { status: 'disconnected' }
   private starting = false
   private reconnectAttempts = 0
+  // Incrementado a cada reset de sessão: uma reconexão agendada (dormindo no
+  // backoff) antes do reset confere isso ao acordar e desiste, em vez de subir
+  // um socket paralelo ao que o reset acabou de criar.
+  private sessionGeneration = 0
   private sentTimestamps: number[] = []
 
   getStatus(): BotStatusPayload {
@@ -120,6 +124,9 @@ class WhatsAppBot extends EventEmitter {
       socket.ev.on('creds.update', saveCreds)
 
       socket.ev.on('connection.update', (update) => {
+        // Eventos de um socket já descartado (ex.: o close disparado pelo
+        // end() do reset) não podem mexer no estado do socket atual.
+        if (socket !== this.socket) return
         void this.handleConnectionUpdate(update)
       })
 
@@ -170,7 +177,9 @@ class WhatsAppBot extends EventEmitter {
           `Reconectando em ${Math.round(delayMs / 1000)}s (tentativa ${this.reconnectAttempts}).`
         )
         this.setStatus({ status: 'connecting' })
+        const generation = this.sessionGeneration
         await sleep(delayMs)
+        if (generation !== this.sessionGeneration) return
         await this.start()
       } else {
         this.setStatus({ status: 'disconnected' })
@@ -341,6 +350,33 @@ class WhatsAppBot extends EventEmitter {
     // no servidor) e a conexão é rejeitada na hora, sem nunca gerar um QR novo.
     clearWhatsAppAuth()
     this.setStatus({ status: 'disconnected' })
+  }
+
+  /**
+   * Saída de emergência pra sessão travada: derruba o socket sem depender da
+   * rede (ao contrário do logout(), que precisa falar com o WhatsApp), apaga
+   * as credenciais locais e sobe de novo — o resultado é sempre um QR novo.
+   * Funciona em qualquer estado, inclusive erro ou preso reconectando.
+   */
+  async resetSession(): Promise<void> {
+    this.sessionGeneration++
+    const socket = this.socket
+    this.socket = null
+    this.starting = false
+    this.paused = false
+    this.reconnectAttempts = 0
+
+    if (socket) {
+      try {
+        socket.end(undefined)
+      } catch (err) {
+        logger.warn({ err }, 'Falha ao encerrar socket durante reset de sessão')
+      }
+    }
+
+    clearWhatsAppAuth()
+    this.setStatus({ status: 'connecting' })
+    await this.start()
   }
 }
 

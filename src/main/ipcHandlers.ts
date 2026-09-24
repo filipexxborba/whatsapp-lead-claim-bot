@@ -31,6 +31,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle(IPC_CHANNELS.botPause, () => bot.pause())
   ipcMain.handle(IPC_CHANNELS.botResume, () => bot.resume())
   ipcMain.handle(IPC_CHANNELS.botLogout, () => bot.logout())
+  ipcMain.handle(IPC_CHANNELS.botResetSession, () => bot.resetSession())
 
   bot.on('status', (status) => {
     getMainWindow()?.webContents.send(IPC_CHANNELS.botStatusChanged, status)

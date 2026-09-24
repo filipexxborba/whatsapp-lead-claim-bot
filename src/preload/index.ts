@@ -35,6 +35,7 @@ const api = {
     pause: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.botPause),
     resume: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.botResume),
     logout: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.botLogout),
+    resetSession: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.botResetSession),
     getStatus: (): Promise<BotStatusPayload> => ipcRenderer.invoke(IPC_CHANNELS.botGetStatus),
     onStatusChanged: (callback: (status: BotStatusPayload) => void): (() => void) => {
       const listener = (_event: unknown, status: BotStatusPayload): void => callback(status)

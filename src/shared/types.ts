@@ -138,6 +138,7 @@ export const IPC_CHANNELS = {
   botPause: 'bot:pause',
   botResume: 'bot:resume',
   botLogout: 'bot:logout',
+  botResetSession: 'bot:reset-session',
   botGetStatus: 'bot:get-status',
   botStatusChanged: 'bot:status-changed',
 

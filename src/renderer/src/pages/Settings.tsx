@@ -4,6 +4,15 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from '@/components/ui/dialog'
 import { StatusBadge } from '@/components/StatusBadge'
 import { SupabaseConfigForm } from '@/components/SupabaseConfigForm'
 import { UpdateCard } from '@/components/UpdateCard'
@@ -25,6 +34,9 @@ export function Settings({
   const [config, setConfig] = useState<SupabaseConfig | null>(null)
   const [saved, setSaved] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
   const isIdle = status.status === 'disconnected' || status.status === 'error'
 
   useEffect(() => {
@@ -37,6 +49,19 @@ export function Settings({
       await window.api.bot.logout()
     } finally {
       setLoggingOut(false)
+    }
+  }
+
+  async function handleResetSession(): Promise<void> {
+    setResetting(true)
+    setResetError(null)
+    try {
+      await window.api.bot.resetSession()
+      setResetOpen(false)
+    } catch (err) {
+      setResetError((err as Error).message)
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -72,14 +97,46 @@ export function Settings({
               <p className="text-sm text-destructive">{status.errorMessage}</p>
             )}
 
-            {!isIdle && (
-              <div>
-                <Button variant="outline" onClick={handleLogout} disabled={loggingOut}>
+            <div className="flex flex-wrap gap-2">
+              {!isIdle && (
+                <Button variant="outline" onClick={handleLogout} disabled={loggingOut || resetting}>
                   {loggingOut && <Loader2 className="animate-spin" />}
                   {loggingOut ? 'Desconectando...' : 'Desconectar número (novo QR)'}
                 </Button>
-              </div>
-            )}
+              )}
+
+              <Dialog
+                open={resetOpen}
+                onOpenChange={(open) => {
+                  if (resetting) return
+                  setResetOpen(open)
+                  if (!open) setResetError(null)
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button variant="outline" disabled={loggingOut}>
+                    Resetar sessão do WhatsApp
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Resetar sessão do WhatsApp?</DialogTitle>
+                    <DialogDescription>
+                      Use quando o bot travar ou não conseguir conectar. A sessão salva neste
+                      computador é apagada e um QR Code novo é gerado para escanear de novo. Grupos,
+                      gatilhos, templates e leads não são afetados.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {resetError && <p className="text-sm text-destructive">{resetError}</p>}
+                  <DialogFooter>
+                    <Button variant="destructive" onClick={handleResetSession} disabled={resetting}>
+                      {resetting && <Loader2 className="animate-spin" />}
+                      {resetting ? 'Resetando...' : 'Resetar sessão'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
           </CardContent>
         </Card>
 
