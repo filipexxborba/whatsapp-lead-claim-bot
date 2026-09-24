@@ -31,7 +31,11 @@ export const logger = pino(
   { level: 'info', timestamp: pino.stdTimeFunctions.isoTime },
   pino.multistream([
     { stream: process.stdout },
-    { stream: pino.destination({ dest: logFilePath, sync: false, mkdir: true }) }
+    // sync: true — com sync: false o arquivo abre de forma assíncrona e, se o
+    // processo sair antes disso (ex.: segunda instância barrada pelo
+    // single-instance lock), o flushSync do pino no exit lança
+    // "sonic boom is not ready yet". Volume de log é baixo, custo desprezível.
+    { stream: pino.destination({ dest: logFilePath, sync: true, mkdir: true }) }
   ])
 )
 
